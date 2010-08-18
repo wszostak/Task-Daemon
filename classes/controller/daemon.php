@@ -221,7 +221,7 @@ class Controller_Daemon extends Controller
 			? 'TaskDaemon is running at PID: ' . $pid . PHP_EOL
 			: 'TaskDaemon is NOT running' . PHP_EOL;
 
-		echo 'TaskDaemon has ' . Mango::factory('task')->db()->count('tasks') . ' tasks in queue'.PHP_EOL;
+		echo 'TaskDaemon has ' . ORM::factory('tasks')->count_all() . ' tasks in queue'.PHP_EOL;
 	}
 
 	/**
@@ -232,9 +232,6 @@ class Controller_Daemon extends Controller
 		// Loop until we are told to die.
 		while (!$this->_sigterm)
 		{
-			// Close any DB connectiosn we have.
-			$this->close_db();
-
 			// Fire up a new DB connection.
 			Database::instance($this->_db);
 
@@ -255,6 +252,9 @@ class Controller_Daemon extends Controller
 				{
 					continue;
 				}
+
+				// Fire up a new DB connection.
+				Database::instance($this->_db);
 
 				// Reload the task
 				$task = ORM::factory('tasks', $task->task_id);
@@ -292,6 +292,9 @@ class Controller_Daemon extends Controller
 						// Child - Execute task
 						Request::factory( Route::get( $task->route )->uri( (array)$task->uri ) )->execute();
 
+						// Fire up a new DB connection.
+						Database::instance($this->_db);
+
 						// Flag the task as run.
 						$task->ran();
 					}
@@ -304,12 +307,20 @@ class Controller_Daemon extends Controller
 							':msg'   => $e->getMessage()
 						)));
 
+						// Fire up a new DB connection.
+						Database::instance($this->_db);
+
 						// Flag the task as run.
 						$task->ran(true, $e->getMessage());
 					}
 
 					exit;
 				}
+
+				// Close any DB connectiosn we have.
+				$this->close_db();
+
+				sleep(3);
 			}
 
 			// No tasks in queue - sleep
