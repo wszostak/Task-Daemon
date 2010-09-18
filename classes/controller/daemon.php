@@ -256,8 +256,8 @@ class Controller_Daemon extends Controller
 				// Fire up a new DB connection.
 				Database::instance($this->_db);
 
-				// Reload the task
-				$task = ORM::factory('tasks', $task->task_id);
+				// Reload the task, mainly to affect custom get/set
+				$task = $task->reload();
 
 				// We are at the max of allowed childern so this task will have to wait until next run.
 				if (count($this->_pids) >= $this->_config['max'])
@@ -290,12 +290,12 @@ class Controller_Daemon extends Controller
 					try
 					{
 						// Child - Execute task
-						Request::factory( Route::get( $task->route )->uri( (array)$task->uri ) )->execute();
+						Request::factory( Route::get( $task->route )->uri( $task->uri ) )->execute();
 
 						// Fire up a new DB connection.
 						Database::instance($this->_db);
 
-						// Flag the task as run.
+						// Flag the task as ran.
 						$task->ran();
 					}
 					catch(Exception $e)
@@ -310,7 +310,7 @@ class Controller_Daemon extends Controller
 						// Fire up a new DB connection.
 						Database::instance($this->_db);
 
-						// Flag the task as run.
+						// Flag the task as ran.
 						$task->ran(true, $e->getMessage());
 					}
 

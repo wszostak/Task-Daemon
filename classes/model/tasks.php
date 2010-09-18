@@ -7,13 +7,20 @@ class Model_Tasks extends ORM
 
 	protected $_created_column = array('column' => 'created', 'format' => TRUE);
 
-	protected $_serialize_column = array('uri', 'data');
+	protected $_serialize_column = array('uri', 'args');
+
+	/**
+	 * Time to keep finished tasks in the table before deleting them.
+	 *
+	 * @var int
+	 */
+	protected $time_delete_finished = 604800; // 7 days
 
 	public function __get($column)
 	{
 		if(in_array($column, $this->_serialize_column))
 		{
-			return json_decode(parent::__get($column));
+			return json_decode(parent::__get($column), true);
 		}
 
 		return parent::__get($column);
@@ -31,22 +38,44 @@ class Model_Tasks extends ORM
 
 	public function ran($error=false, $err_msg=null)
 	{
-		$this->lastrun = new Database_Expression("UNIX_TIMESTAMP()");
-
 		// Error occured.
 		if($error)
 		{
-			$this->failed = new Database_Expression("UNIX_TIMESTAMP()");
+			$this->failed = DB::expr("UNIX_TIMESTAMP()");
 			$this->failed_msg = $err_msg;
+
+			// Check to see if we need to kill this task on error, otherwise it will continue to try to run.
+			if($this->fail_on_error == 1)
+			{
+				$this->active = 0; // deactivate
+			}
 		}
 
-		// We have a recurring task so we need to reset it.
-		if($this->recurring > 0)
+		// We completed successfully so lets see what we need to do
+		if($this->active == 1)
 		{
-			$this->running = 0;
-			$this->nextrun = new Database_Expression("UNIX_TIMESTAMP() + {$this->recurring}");
+			// We have a recurring task so we need to reset it.
+			if($this->recurring > 0)
+			{
+				$this->nextrun = DB::expr("UNIX_TIMESTAMP() + {$this->recurring}");
+			}
+			else // Single task so mark as completed.
+			{
+				$this->active = 0; // deactivate
+			}
 		}
+
+		// Task is no longer running.
+		$this->running = 0;
+
+		// We finished this right now
+		$this->lastrun = DB::expr("UNIX_TIMESTAMP()");
 
 		return $this->save();
+	}
+
+	public function cleanup()
+	{
+		// @todo: add in cleanup
 	}
 }
