@@ -232,95 +232,109 @@ class Controller_Daemon extends Controller
 		// Loop until we are told to die.
 		while (!$this->_sigterm)
 		{
-			// Fire up a new DB connection.
-			Database::instance($this->_db);
-
-			// Find the tasks that need to be run.
-			$tasks = ORM::factory('tasks')
-				->where('active', '=', '1')
-				->where('running', '=', '0')
-				->where('nextrun', '<=', time())
-				->order_by('priority', 'DESC')
-				->order_by('nextrun', 'ASC')
-				->limit($this->_config['max'])
-				->find_all();
-
-			foreach($tasks AS $task)
+			try
 			{
-				// Task did not load for some reason.
-				if(!$task->loaded())
-				{
-					continue;
-				}
-
 				// Fire up a new DB connection.
 				Database::instance($this->_db);
 
-				// Reload the task, mainly to affect custom get/set
-				$task = $task->reload();
+				// Find the tasks that need to be run.
+				$tasks = ORM::factory('tasks')
+					->where('active', '=', '1')
+					->where('running', '=', '0')
+					->where('nextrun', '<=', time())
+					->order_by('priority', 'DESC')
+					->order_by('nextrun', 'ASC')
+					->limit($this->_config['max'])
+					->find_all();
 
-				// We are at the max of allowed childern so this task will have to wait until next run.
-				if (count($this->_pids) >= $this->_config['max'])
+				foreach($tasks AS $task)
 				{
-					break;
-				}
-
-				// Update task status
-				$task->running = 1;
-				$task->save();
-
-				// Write log to prevent memory issues
-				Kohana::$log->write();
-
-				// Fork process to execute task
-				$pid = pcntl_fork();
-
-				if ($pid == -1)
-				{
-					Kohana::$log->add('error', 'TaskDaemon: Could not spawn child task process.');
-					exit;
-				}
-				elseif ($pid)
-				{
-					// Parent - add the child's PID to the running list
-					$this->_pids[$pid] = time();
-				}
-				else
-				{
-					try
+					// Task did not load for some reason.
+					if(!$task->loaded())
 					{
-						// Child - Execute task
-						Request::factory( Route::get( $task->route )->uri( $task->uri ) )->execute();
-
-						// Fire up a new DB connection.
-						Database::instance($this->_db);
-
-						// Flag the task as ran.
-						$task->ran();
-					}
-					catch(Exception $e)
-					{
-						// Task failed - log message
-						Kohana::$log->add('error', strtr('TaskDaemon: Task failed - route: :route, uri: :uri, msg: :msg', array(
-							':route' => $task->route,
-							':uri'   => http_build_query((array)$task->uri),
-							':msg'   => $e->getMessage()
-						)));
-
-						// Fire up a new DB connection.
-						Database::instance($this->_db);
-
-						// Flag the task as ran.
-						$task->ran(true, $e->getMessage());
+						continue;
 					}
 
-					exit;
+					// Fire up a new DB connection.
+					Database::instance($this->_db);
+
+					// Reload the task, mainly to affect custom get/set
+					$task = $task->reload();
+
+					// We are at the max of allowed childern so this task will have to wait until next run.
+					if (count($this->_pids) >= $this->_config['max'])
+					{
+						break;
+					}
+
+					// Update task status
+					$task->running = 1;
+					$task->save();
+
+					// Write log to prevent memory issues
+					Kohana::$log->write();
+
+					// Fork process to execute task
+					$pid = pcntl_fork();
+
+					if ($pid == -1)
+					{
+						Kohana::$log->add('error', 'TaskDaemon: Could not spawn child task process.');
+						exit;
+					}
+					elseif ($pid)
+					{
+						// Parent - add the child's PID to the running list
+						$this->_pids[$pid] = time();
+					}
+					else
+					{
+						try
+						{
+							// Child - Execute task
+							Request::factory( Route::get( $task->route )->uri( $task->uri ) )->execute();
+
+							// Fire up a new DB connection.
+							Database::instance($this->_db);
+
+							// Flag the task as ran.
+							$task->ran();
+						}
+						catch(Exception $e)
+						{
+							// Task failed - log message
+							Kohana::$log->add('error', strtr('TaskDaemon: Task failed - route: :route, uri: :uri, msg: :msg', array(
+								':route' => $task->route,
+								':uri'   => http_build_query((array)$task->uri),
+								':msg'   => $e->getMessage()
+							)));
+
+							// Fire up a new DB connection.
+							Database::instance($this->_db);
+
+							// Flag the task as ran.
+							$task->ran(true, $e->getMessage());
+						}
+
+						exit;
+					}
+
+					// Close any DB connectiosn we have.
+					$this->close_db();
+
+					sleep(3);
 				}
 
-				// Close any DB connectiosn we have.
-				$this->close_db();
-
-				sleep(3);
+				// Lets not run the clean up all the time as it is not that important.
+				if(mt_rand(1, 50) == 25)
+				{
+					// Lets clean up any old tasks.
+					Tasks::clearCompleted();
+				}
+			}
+			catch (Database_Exception $e)
+			{
+				Kohana::$log->add('error', 'TaskDaemon: Database error code: '.$e->getCode().' msg: '. $e->getMessage());
 			}
 
 			// No tasks in queue - sleep
@@ -352,6 +366,12 @@ class Controller_Daemon extends Controller
 
 		// Remove PID file
 		unlink($this->_config['pid_path']);
+
+		// Now lets set all the tasks to not running since they are all dead now.
+		DB::delete(ORM::factory('tasks')->table_name())
+			->set(array('running' => 0))
+			->where('running', '=', 1)
+			->execute();
 
 		$this->close_db();
 

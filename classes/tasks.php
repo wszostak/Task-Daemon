@@ -2,6 +2,16 @@
 
 class Tasks
 {
+	/**
+	 * Add a new task to the list.
+	 *
+	 * @param string $route
+	 * @param array $uri
+	 * @param bool $fail_on_error
+	 * @param int $recurring
+	 * @param int $priority
+	 * @throws TasksException
+	 */
 	static public function add($route, Array $uri=null, $fail_on_error=true, $recurring=0, $priority=5)
 	{
 		try {
@@ -27,6 +37,19 @@ class Tasks
 			throw new TasksException($e->getMessage(), $e->getCode());
 			return false;
 		}
+	}
+
+	/**
+	 * Clear the completed tasks that are not actively recurring.
+	 */
+	static public function clearCompleted()
+	{
+		DB::delete(ORM::factory('tasks')->table_name())
+			->where('active','=',0)
+			->where('running','=',0)
+			->where('failed','=',0)
+			->where('lastrun','<=', DB::expr("UNIX_TIMESTAMP()-432000"))
+			->execute();
 	}
 }
 
