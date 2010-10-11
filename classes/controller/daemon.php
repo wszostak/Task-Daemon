@@ -335,6 +335,18 @@ class Controller_Daemon extends Controller
 			catch (Database_Exception $e)
 			{
 				Kohana::$log->add('error', 'TaskDaemon: Database error code: '.$e->getCode().' msg: '. $e->getMessage());
+
+				// Write log to prevent memory issues
+				Kohana::$log->write();
+
+				// Mysql Server went away.
+				if($e->getCode() == 2006)
+				{
+					$this->close_db();
+
+					// Fire up a new DB connection.
+					Database::instance($this->_db);
+				}
 			}
 
 			// No tasks in queue - sleep
