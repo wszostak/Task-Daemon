@@ -380,7 +380,7 @@ class Controller_Daemon extends Controller
 		unlink($this->_config['pid_path']);
 
 		// Now lets set all the tasks to not running since they are all dead now.
-		DB::delete(ORM::factory('tasks')->table_name())
+		DB::update(ORM::factory('tasks')->table_name())
 			->set(array('running' => 0))
 			->where('running', '=', 1)
 			->execute();
