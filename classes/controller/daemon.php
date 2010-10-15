@@ -247,89 +247,100 @@ class Controller_Daemon extends Controller
 					->limit($this->_config['max'])
 					->find_all();
 
-				foreach($tasks AS $task)
+				if(count($tasks) > 0)
 				{
-					// Task did not load for some reason.
-					if(!$task->loaded())
+					foreach($tasks AS $task)
 					{
-						continue;
-					}
-
-					// Fire up a new DB connection.
-					Database::instance($this->_db);
-
-					// Reload the task, mainly to affect custom get/set
-					$task = $task->reload();
-
-					// We are at the max of allowed childern so this task will have to wait until next run.
-					if (count($this->_pids) >= $this->_config['max'])
-					{
-						break;
-					}
-
-					// Update task status
-					$task->running = 1;
-					$task->save();
-
-					// Write log to prevent memory issues
-					Kohana::$log->write();
-
-					// Fork process to execute task
-					$pid = pcntl_fork();
-
-					if ($pid == -1)
-					{
-						Kohana::$log->add('error', 'TaskDaemon: Could not spawn child task process.');
-						exit;
-					}
-					elseif ($pid)
-					{
-						// Parent - add the child's PID to the running list
-						$this->_pids[$pid] = time();
-					}
-					else
-					{
-						try
+						// Task did not load for some reason.
+						if(!$task->loaded())
 						{
-							// Child - Execute task
-							Request::factory( Route::get( $task->route )->uri( $task->uri ) )->execute();
-
-							// Fire up a new DB connection.
-							Database::instance($this->_db);
-
-							// Flag the task as ran.
-							$task->ran();
-						}
-						catch(Exception $e)
-						{
-							// Task failed - log message
-							Kohana::$log->add('error', strtr('TaskDaemon: Task failed - route: :route, uri: :uri, msg: :msg', array(
-								':route' => $task->route,
-								':uri'   => http_build_query((array)$task->uri),
-								':msg'   => $e->getMessage()
-							)));
-
-							// Fire up a new DB connection.
-							Database::instance($this->_db);
-
-							// Flag the task as ran.
-							$task->ran(true, $e->getMessage());
+							continue;
 						}
 
-						exit;
+						// Fire up a new DB connection.
+						Database::instance($this->_db);
+
+						// Reload the task, mainly to affect custom get/set
+						$task = $task->reload();
+
+						// We are at the max of allowed childern so this task will have to wait until next run.
+						if (count($this->_pids) >= $this->_config['max'])
+						{
+							break;
+						}
+
+						// Update task status
+						$task->running = 1;
+						$task->save();
+
+						// Write log to prevent memory issues
+						Kohana::$log->write();
+
+						// Fork process to execute task
+						$pid = pcntl_fork();
+
+						if ($pid == -1)
+						{
+							Kohana::$log->add('error', 'TaskDaemon: Could not spawn child task process.');
+							exit;
+						}
+						elseif ($pid)
+						{
+							// Parent - add the child's PID to the running list
+							$this->_pids[$pid] = time();
+						}
+						else
+						{
+							try
+							{
+								// Child - Execute task
+								Request::factory( Route::get( $task->route )->uri( $task->uri ) )->execute();
+
+								// Fire up DB connection.
+								Database::instance($this->_db);
+
+								// Flag the task as ran.
+								$task->ran();
+							}
+							catch(Exception $e)
+							{
+								// Task failed - log message
+								Kohana::$log->add('error', strtr('TaskDaemon: Task failed - route: :route, uri: :uri, msg: :msg', array(
+									':route' => $task->route,
+									':uri'   => http_build_query((array)$task->uri),
+									':msg'   => $e->getMessage()
+								)));
+
+								// Write log to prevent memory issues
+								Kohana::$log->write();
+
+								// Fire up a new DB connection.
+								Database::instance($this->_db);
+
+								// Flag the task as ran.
+								$task->ran(true, $e->getMessage());
+							}
+
+							// Close any DB connectiosn we have.
+							$this->close_db();
+
+							exit;
+						}
+
+						// Close any DB connectiosn we have.
+						$this->close_db();
+
+						sleep(3);
 					}
-
-					// Close any DB connectiosn we have.
-					$this->close_db();
-
-					sleep(3);
 				}
-
-				// Lets not run the clean up all the time as it is not that important.
-				if(mt_rand(1, 50) == 25)
+				else
 				{
-					// Lets clean up any old tasks.
-					Tasks::clearCompleted();
+					// Lets not run the clean up all the time as it is not that important.
+					if(mt_rand(1, 50) == 25)
+					{
+						// Lets clean up any old tasks.
+						Tasks::clearCompleted();
+					}
 				}
 			}
 			catch (Database_Exception $e)
@@ -377,7 +388,10 @@ class Controller_Daemon extends Controller
 		}
 
 		// Remove PID file
-		unlink($this->_config['pid_path']);
+		if(file_exists($this->_config['pid_path']))
+		{
+			unlink($this->_config['pid_path']);
+		}
 
 		// Now lets set all the tasks to not running since they are all dead now.
 		DB::update(ORM::factory('tasks')->table_name())

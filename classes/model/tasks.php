@@ -38,6 +38,9 @@ class Model_Tasks extends ORM
 
 	public function ran($error=false, $err_msg=null)
 	{
+		// Re init
+		$this->_initialize();
+
 		// Error occured.
 		if($error)
 		{
