@@ -3,6 +3,13 @@
 class Tasks
 {
 	/**
+	 * The database connection to use.
+	 *
+	 * @var string
+	 */
+	static public $_db = 'default';
+
+	/**
 	 * Add a new task to the list.
 	 *
 	 * @param string $route
@@ -50,6 +57,122 @@ class Tasks
 			->where('failed','=',0)
 			->where('lastrun','<=', DB::expr("UNIX_TIMESTAMP()-432000"))
 			->execute();
+	}
+
+	static public function clearFailed()
+	{
+		// @todo: Add code here.
+	}
+
+	/**
+	 * Get the next task waiting and if you find one set it to run.
+	 */
+	static public function getNextTask()
+	{
+		$db = self::openDB();
+
+		$task = ORM::factory('tasks')
+			->where('active', '=', '1')
+			->where('running', '=', '0')
+			->where('nextrun', '<=', time())
+			->order_by('priority', 'DESC')
+			->order_by('nextrun', 'ASC')
+			->limit(1)
+			->find();
+
+		if($task->loaded())
+		{
+			// We are going to run this one so lets flag it as running.
+			$task->running = 1;
+			$task->save();
+		}
+		else
+		{
+			$task = false;
+		}
+
+		self::closeDB();
+		unset($db);
+
+		return $task;
+	}
+
+	/**
+	 * Flag a task as run. Also will decide if the task so be rerun or fail.
+	 *
+	 * @param int $task_id
+	 * @param bool $error
+	 * @param string $err_msg
+	 */
+	static public function ranTask($task_id, $error=false, $err_msg=null)
+	{
+		$db = self::openDB();
+
+		$task = ORM::factory('tasks', $task_id);
+
+		// Error occured.
+		if($error)
+		{
+			$task->failed = DB::expr("UNIX_TIMESTAMP()");
+			$task->failed_msg = $err_msg;
+
+			// Check to see if we need to kill this task on error, otherwise it will continue to try to run.
+			if($task->fail_on_error == 1)
+			{
+				$task->active = 0; // deactivate
+			}
+		}
+
+		// We completed successfully so lets see what we need to do
+		if($task->active == 1)
+		{
+			// We have a recurring task so we need to reset it.
+			if($task->recurring > 0)
+			{
+				$task->nextrun = DB::expr("UNIX_TIMESTAMP() + {$task->recurring}");
+			}
+			else // Single task so mark as completed.
+			{
+				$task->active = 0; // deactivate
+			}
+		}
+
+		// Task is no longer running.
+		$task->running = 0;
+
+		// We finished this right now
+		$task->lastrun = DB::expr("UNIX_TIMESTAMP()");
+
+		// Save the changes to the task.
+		$res = $task->save();
+
+		self::closeDB();
+		unset($db);
+
+		return $res;
+	}
+
+	/**
+	 * Open and return a database connection.
+	 */
+	static public function openDB()
+	{
+		return Database::instance(self::$_db);
+	}
+
+	/**
+	 * Close all the database connections
+	 */
+	static public function closeDB()
+	{
+		foreach(Database::$instances as $db)
+		{
+			$db->disconnect();
+		}
+
+		unset($db);
+
+		Database::$instances = array();
 	}
 }
 

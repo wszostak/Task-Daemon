@@ -31,12 +31,9 @@ class Controller_Daemon extends Controller
 	protected $_pids = array();
 
 	/**
-	 * The database config to connect to.
-	 *
-	 * @var string
+	 * Do some stuff to prepare the process to run as a daemon in the background.
+	 * @see Kohana_Controller::before()
 	 */
-	protected $_db = 'default';
-
 	public function before()
 	{
 		// Deny non-CLI access
@@ -56,6 +53,11 @@ class Controller_Daemon extends Controller
 		pcntl_signal(SIGTERM, array($this, 'sig_handler'));
 		declare(ticks = 1);
 
+		// Disable any errors from coming into the echo.
+		ini_set('display_errors', 'off');
+		ini_set('log_errors', 'on');
+		error_reporting(E_ALL);
+
 		// Load config
 		$params = $this->request->param();
 
@@ -68,9 +70,8 @@ class Controller_Daemon extends Controller
 
 		if (empty($this->_config))
 		{
-			Kohana::$log->add('error', 'TaskDaemon: Config not found ("daemon.' . $this->_config_name . '"). Exiting.');
-			echo 'TaskDaemon: Config not found ("daemon.' . $this->_config_name . '"). Exiting.' . PHP_EOL;
-			exit;
+			Kohana::$log->add(Kohana::ERROR, 'TaskDaemon: Config not found ("daemon.' . $this->_config_name . '"). Exiting.');
+			exit(1);
 		}
 
 		// Set the pid file
@@ -78,7 +79,7 @@ class Controller_Daemon extends Controller
 
 		/*
 		 * Correct the delay time set so that we do not eat up all the processor(s)' time.  Setting usleep to too short of a delay
-		 * will cause the process to eat up all the available CPU time.
+		 * will cause the process to eat up all the available CPU time (i.e. process will run at 99-100%).
 		 */
 		$this->_config['sleep'] = ($this->_config['sleep'] >= 500)?$this->_config['sleep']:500;
 
@@ -119,7 +120,7 @@ class Controller_Daemon extends Controller
 			$pid = file_get_contents($this->_config['pid_path']);
 			if (file_exists("/proc/".$pid))
 			{
-				Kohana::$log->add('debug', 'TaskDaemon: Daemon already running at: ' . $pid);
+				Kohana::$log->add(KOHANA::DEBUG, 'TaskDaemon: Daemon already running at: ' . $pid);
 				exit;
 			}
 		}
@@ -130,22 +131,20 @@ class Controller_Daemon extends Controller
 		if ($pid == -1)
 		{
 			// Error - fork failed
-			Kohana::$log->add('error', 'TaskDaemon: Initial fork failed');
+			Kohana::$log->add(Kohana::ERROR, 'TaskDaemon: Initial fork failed');
 			exit;
 		}
 		elseif ($pid)
 		{
 			// Fork successful - exit parent (daemon continues in child)
-			Kohana::$log->add('debug', 'TaskDaemon: Daemon created succesfully at: ' . $pid);
+			Kohana::$log->add(KOHANA::DEBUG, 'TaskDaemon: Daemon created succesfully at: ' . $pid);
 			file_put_contents( $this->_config['pid_path'], $pid);
-			$this->close_db();
-			exit;
+			exit(0);
 		}
 		else
 		{
 			// Background process - run daemon
-
-			Kohana::$log->add('debug',strtr('TaskDaemon: Config :config loaded, max: :max, sleep: :sleep', array(
+			Kohana::$log->add(KOHANA::DEBUG,strtr('TaskDaemon: Config :config loaded, max: :max, sleep: :sleep', array(
 				':config' => $this->_config_name,
 				':max'    => $this->_config['max'],
 				':sleep'  => $this->_config['sleep']
@@ -153,12 +152,6 @@ class Controller_Daemon extends Controller
 
 			// Write the log to ensure no memory issues
 			Kohana::$log->write();
-
-			// Close any DB connectiosn we have.
-			$this->close_db();
-
-			// Fire up a new DB connection.
-			Database::instance($this->_db);
 
 			// run daemon
 			$this->daemon();
@@ -178,31 +171,28 @@ class Controller_Daemon extends Controller
 
 			if ( $pid !== 0)
 			{
-				Kohana::$log->add('debug','Sending SIGTERM to pid ' . $pid);
-				echo 'Sending SIGTERM to pid ' . $pid . PHP_EOL;
+				Kohana::$log->add(KOHANA::DEBUG, 'Sending SIGTERM to pid ' . $pid);
 
 				posix_kill($pid, SIGTERM);
 
-				if ( posix_get_last_error() ===0)
+				if (posix_get_last_error() === 0)
 				{
-					echo "Signal send SIGTERM to pid ".$pid.PHP_EOL;
+					Kohana::$log->add(KOHANA::DEBUG, 'Signal sent SIGTERM to pid ' . $pid);
 				}
 				else
 				{
-					echo "An error occured while sending SIGTERM".PHP_EOL;
+					Kohana::$log->add(Kohana::ERROR, "TaskDaemon: An error occured while sending SIGTERM");
 					unlink($this->_config['pid_path']);
 				}
 			}
 			else
 			{
-				Kohana::$log->add("debug", "Could not find TaskDaemon pid in file :".$this->_config['pid_path']);
-				echo "Could not find task_queue pid in file :".$this->_config['pid_path'].PHP_EOL;
+				Kohana::$log->add(KOHANA::DEBUG, "Could not find TaskDaemon pid in file :".$this->_config['pid_path']);
 			}
 		}
 		else
 		{
-			Kohana::$log->add("error", "TaskDaemon pid file ".$this->_config['pid_path']." does not exist");
-			echo "TaskDaemon pid file ".$this->_config['pid_path']." does not exist".PHP_EOL;
+			Kohana::$log->add(Kohana::ERROR, "TaskDaemon pid file ".$this->_config['pid_path']." does not exist");
 		}
 	}
 
@@ -229,109 +219,91 @@ class Controller_Daemon extends Controller
 	 */
 	protected function daemon()
 	{
-		// Loop until we are told to die.
-		while (!$this->_sigterm)
-		{
-			try
+		try {
+			// Loop until we are told to die.
+			while (!$this->_sigterm)
 			{
-				// Fire up a new DB connection.
-				Database::instance($this->_db);
-
-				// Find the tasks that need to be run.
-				$tasks = ORM::factory('tasks')
-					->where('active', '=', '1')
-					->where('running', '=', '0')
-					->where('nextrun', '<=', time())
-					->order_by('priority', 'DESC')
-					->order_by('nextrun', 'ASC')
-					->limit($this->_config['max'])
-					->find_all();
-
-				if(count($tasks) > 0)
+				// See if we are within our defined child limits.
+				if(count($this->_pids) >= $this->_config['max'])
 				{
-					foreach($tasks AS $task)
+					// Let's sleep on it.
+					usleep($this->_config['sleep']);
+					continue; // Restart.
+				}
+
+				// Lets get the next task
+				if(($task = Tasks::getNextTask()) !== false)
+				{
+					// Write log to prevent memory issues
+					Kohana::$log->write();
+
+					// Fork process to execute task
+					$pid = pcntl_fork();
+
+					if ($pid == -1) // We failed, hard
 					{
-						// Task did not load for some reason.
-						if(!$task->loaded())
-						{
-							continue;
-						}
-
-						// Fire up a new DB connection.
-						Database::instance($this->_db);
-
-						// Reload the task, mainly to affect custom get/set
-						$task = $task->reload();
-
-						// We are at the max of allowed childern so this task will have to wait until next run.
-						if (count($this->_pids) >= $this->_config['max'])
-						{
-							break;
-						}
-
-						// Update task status
-						$task->running = 1;
-						$task->save();
-
-						// Write log to prevent memory issues
-						Kohana::$log->write();
-
-						// Fork process to execute task
-						$pid = pcntl_fork();
-
-						if ($pid == -1)
-						{
-							Kohana::$log->add('error', 'TaskDaemon: Could not spawn child task process.');
-							exit;
-						}
-						elseif ($pid)
-						{
-							// Parent - add the child's PID to the running list
-							$this->_pids[$pid] = time();
-						}
-						else
-						{
-							try
-							{
-								// Child - Execute task
-								Request::factory( Route::get( $task->route )->uri( $task->uri ) )->execute();
-
-								// Fire up DB connection.
-								Database::instance($this->_db);
-
-								// Flag the task as ran.
-								$task->ran();
-							}
-							catch(Exception $e)
-							{
-								// Task failed - log message
-								Kohana::$log->add('error', strtr('TaskDaemon: Task failed - route: :route, uri: :uri, msg: :msg', array(
-									':route' => $task->route,
-									':uri'   => http_build_query((array)$task->uri),
-									':msg'   => $e->getMessage()
-								)));
-
-								// Write log to prevent memory issues
-								Kohana::$log->write();
-
-								// Fire up a new DB connection.
-								Database::instance($this->_db);
-
-								// Flag the task as ran.
-								$task->ran(true, $e->getMessage());
-							}
-
-							// Close any DB connectiosn we have.
-							$this->close_db();
-
-							exit;
-						}
-
-						// Close any DB connectiosn we have.
-						$this->close_db();
-
-						sleep(3);
+						Kohana::$log->add(Kohana::ERROR, 'TaskDaemon: Could not spawn child task process.');
+						exit(1);
 					}
+					elseif ($pid) // Parent so add the pid to the list
+					{
+						// Parent - add the child's PID to the running list
+						$this->_pids[$pid] = time();
+					}
+					else // We are child so lets do it!
+					{
+						try {
+							// Get db connection.
+							Tasks::openDB();
+
+							Kohana::$log->add(Kohana::DEBUG, strtr('TaskDaemon; Child Execute task - route: :route, uri: :uri', array(
+								':route' => $task->route,
+								':uri'   => http_build_query($task->uri)
+							)));
+
+							// Write log to prevent memory issues
+							Kohana::$log->write();
+
+							// Child - Execute task
+							Request::factory( Route::get( $task->route )->uri( $task->uri ) )->execute();
+
+							// Flag the task as ran.
+							Tasks::ranTask($task->task_id);
+						}
+						catch (Database_Exception $e)
+						{
+							Kohana::$log->add(Kohana::ERROR, 'TaskDaemon Task: Database error code: '.$e->getCode().' msg: '. $e->getMessage());
+
+							// Write log to prevent memory issues
+							Kohana::$log->write();
+
+							// Flag the task as ran, but with error.
+							Tasks::ranTask($task->task_id, true, $e->getMessage());
+
+						}
+						catch (Exception $e)
+						{
+							// Task failed - log message
+							Kohana::$log->add(Kohana::ERROR, strtr('TaskDaemon: Task failed - route: :route, uri: :uri, msg: :msg', array(
+								':route' => $task->route,
+								':uri'   => http_build_query((array)$task->uri),
+								':msg'   => $e->getMessage()
+							)));
+
+							// Write log to prevent memory issues
+							Kohana::$log->write();
+
+							// Flag the task as ran, but with error.
+							Tasks::ranTask($task->task_id, true, $e->getMessage());
+						}
+
+						// We are done.
+						unset($task);
+						exit(0);
+					}
+
+					// Sleep for a short bit to keep from doing things too fast.
+					usleep(10000);
 				}
 				else
 				{
@@ -341,31 +313,44 @@ class Controller_Daemon extends Controller
 						// Lets clean up any old tasks.
 						Tasks::clearCompleted();
 					}
-				}
-			}
-			catch (Database_Exception $e)
-			{
-				Kohana::$log->add('error', 'TaskDaemon: Database error code: '.$e->getCode().' msg: '. $e->getMessage());
 
-				// Write log to prevent memory issues
-				Kohana::$log->write();
-
-				// Mysql Server went away.
-				if($e->getCode() == 2006)
-				{
-					$this->close_db();
-
-					// Fire up a new DB connection.
-					Database::instance($this->_db);
+					// Let's sleep on it.
+					usleep($this->_config['sleep']);
 				}
 			}
 
-			// No tasks in queue - sleep
-			usleep($this->_config['sleep']);
+			// Loop has died so lets do some cleaning up.
+			$this->clean();
+
+			Kohana::$log->add(KOHANA::DEBUG, "Taskdaemon exited!");
+
+			// Write log to prevent memory issues
+			Kohana::$log->write();
+
+			exit(0);
 		}
+		catch (Database_Exception $e)
+		{
+			Kohana::$log->add(Kohana::ERROR, 'TaskDaemon Task: Database error code: '.$e->getCode().' msg: '. $e->getMessage());
 
-		// clean up
-		$this->clean();
+			Kohana::$log->add(KOHANA::DEBUG, "Taskdaemon exited!");
+
+			// Write log to prevent memory issues
+			Kohana::$log->write();
+
+			exit(1);
+		}
+		catch (Exception $e)
+		{
+			Kohana::$log->add(Kohana::ERROR, 'TaskDaemon: '.$e->getCode().' msg: '. $e->getMessage());
+
+			Kohana::$log->add(KOHANA::DEBUG, "Taskdaemon exited!");
+
+			// Write log to prevent memory issues
+			Kohana::$log->write();
+
+			exit(1);
+		}
 	}
 
 	/*
@@ -374,6 +359,9 @@ class Controller_Daemon extends Controller
 	 */
 	protected function clean()
 	{
+		// Load up a db instance.
+		//$db = Tasks::openDB();
+
 		$tries = 0;
 
 		while ($tries++ < 5 && count($this->_pids))
@@ -384,7 +372,7 @@ class Controller_Daemon extends Controller
 
 		if (count($this->_pids))
 		{
-			Kohana::$log('error','TaskDaemon: Could not kill all children');
+			Kohana::$log(Kohana::ERROR,'TaskDaemon: Could not kill all children');
 		}
 
 		// Remove PID file
@@ -399,9 +387,9 @@ class Controller_Daemon extends Controller
 			->where('running', '=', 1)
 			->execute();
 
-		$this->close_db();
-
-		echo 'TaskDaemon exited' . PHP_EOL;
+		// Close the db instance
+		//Tasks::closeDB();
+		//unset($db);
 	}
 
 	/*
@@ -416,18 +404,6 @@ class Controller_Daemon extends Controller
 		}
 
 		return count($this->_pids) === 0;
-	}
-
-	protected function close_db()
-	{
-		foreach(Database::$instances as $db)
-		{
-			$db->disconnect();
-		}
-
-		unset($db);
-
-		Database::$instances = array();
 	}
 
 	/*
@@ -448,7 +424,7 @@ class Controller_Daemon extends Controller
 			case SIGTERM:
 				// Kill signal
 				$this->_sigterm = TRUE;
-				Kohana::$log->add('debug', 'TaskDaemon: Hit a SIGTERM');
+				Kohana::$log->add(KOHANA::DEBUG, 'TaskDaemon: Hit a SIGTERM');
 			break;
 		}
 	}
