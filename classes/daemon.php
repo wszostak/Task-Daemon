@@ -25,15 +25,13 @@
  */
 class Daemon
 {
-	static public $config = null;
-
-	static public function launch()
+	static public function launch(Array $config=null)
 	{
 		// Get a new instance
 		$inst = new self();
 
 		// Now lets set some stuff
-		$inst->_config = self::$config;
+		$inst->_config = $config;
 
 		// Now run the daemon
 		$inst->run();
@@ -63,6 +61,9 @@ class Daemon
 
 	public function __construct()
 	{
+		ob_implicit_flush();
+		ignore_user_abort(true);
+
 		// Setup
 		ini_set("max_execution_time", "0");
 		ini_set("max_input_time", "0");
@@ -76,9 +77,6 @@ class Daemon
 		ini_set('display_errors', 'off');
 		ini_set('log_errors', 'on');
 		error_reporting(E_ALL);
-
-		// Start buffering
-		ob_start();
 	}
 
 	public function run()
@@ -90,7 +88,7 @@ class Daemon
 			// Loop until we are told to die.
 			while (!$this->_sigterm)
 			{
-				// Dispatch any signals.
+				// Dispatch any signals, used instead of ticks=1.
 				pcntl_signal_dispatch();
 
 				// See if we are within our defined child limits.
@@ -196,6 +194,9 @@ class Daemon
 
 					// Sleep for a short bit to keep from doing things too fast.
 					usleep($this->_config['sleep']);
+
+					// Dispatch any signals, used instead of ticks=1.
+					pcntl_signal_dispatch();
 				}
 				else
 				{
@@ -228,7 +229,7 @@ class Daemon
 		{
 			Kohana::$log->add(Kohana::ERROR, 'TaskDaemon Task: Database error code: '.$e->getCode().' msg: '. $e->getMessage());
 
-			Kohana::$log->add(KOHANA::DEBUG, "Taskdaemon exited!");
+			Kohana::$log->add(KOHANA::DEBUG, "Taskdaemon died!");
 
 			// Write log to prevent memory issues
 			Kohana::$log->write();
@@ -239,7 +240,7 @@ class Daemon
 		{
 			Kohana::$log->add(Kohana::ERROR, 'TaskDaemon: '.$e->getCode().' msg: '. $e->getMessage());
 
-			Kohana::$log->add(KOHANA::DEBUG, "Taskdaemon exited!");
+			Kohana::$log->add(KOHANA::DEBUG, "Taskdaemon died!");
 
 			// Write log to prevent memory issues
 			Kohana::$log->write();
@@ -267,7 +268,6 @@ class Daemon
 			case SIGTERM:
 				// Kill signal
 				$this->_sigterm = TRUE;
-				//Kohana::$log->add(KOHANA::DEBUG, 'TaskDaemon: Hit a SIGTERM');
 			break;
 
 			default:

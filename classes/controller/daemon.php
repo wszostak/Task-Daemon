@@ -147,11 +147,8 @@ class Controller_Daemon extends Controller
 			// Write the log to ensure no memory issues
 			Kohana::$log->write();
 
-			// Set the config for the daemon
-			Daemon::$config = $this->_config;
-
 			// Launch the daemon
-			Daemon::launch();
+			Daemon::launch($this->_config);
 
 			// We are done so we exit out.
 			exit(0);
