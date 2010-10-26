@@ -75,7 +75,7 @@ class Controller_Daemon extends Controller
 		 * Correct the delay time set so that we do not eat up all the processor(s)' time.  Setting usleep to too short of a delay
 		 * will cause the process to eat up all the available CPU time (i.e. process will run at 99-100%).
 		 */
-		$this->_config['sleep'] = ($this->_config['sleep'] >= 500)?$this->_config['sleep']:500;
+		$this->_config['sleep'] = ($this->_config['sleep'] >= 10000)?$this->_config['sleep']:10000;
 	}
 
 	/*
@@ -150,8 +150,7 @@ class Controller_Daemon extends Controller
 			// Launch the daemon
 			Daemon::launch($this->_config);
 
-			// We are done so we exit out.
-			exit(0);
+			unset($this);
 		}
 	}
 

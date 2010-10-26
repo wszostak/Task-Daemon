@@ -64,24 +64,49 @@ class Tasks
 			throw new TasksException($e->getMessage(), $e->getCode());
 			return false;
 		}
+		catch (Exception $e)
+		{
+			throw new TasksException($e->getMessage(), $e->getCode());
+			return false;
+		}
 	}
 
 	/**
-	 * Clear the completed tasks that are not actively recurring.
+	 * Clear the completed tasks that are not recurring.
 	 */
 	static public function clearCompleted()
 	{
-		DB::delete(ORM::factory('tasks')->table_name())
+		$db = self::openDB();
+
+		DB::delete('tasks')
 			->where('active','=',0)
 			->where('running','=',0)
+			->where('recurring','=',0)
 			->where('failed','=',0)
 			->where('lastrun','<=', DB::expr("UNIX_TIMESTAMP()-432000"))
 			->execute();
+
+		self::closeDB();
+		unset($db);
+
+		return true;
 	}
 
 	static public function clearFailed()
 	{
-		// @todo: Add code here.
+		$db = self::openDB();
+
+		DB::delete('tasks')
+			->where('active','=',0)
+			->where('recurring','=',0)
+			->where('failed','>',0)
+			->where('lastrun','<=', DB::expr("UNIX_TIMESTAMP()-432000"))
+			->execute();
+
+		self::closeDB();
+		unset($db);
+
+		return true;
 	}
 
 	/**
@@ -151,7 +176,7 @@ class Tasks
 			{
 				$task->nextrun = DB::expr("UNIX_TIMESTAMP() + {$task->recurring}");
 			}
-			else // Single task so mark as completed.
+			else // Single (non-recurring) task so mark as completed.
 			{
 				$task->active = 0; // deactivate
 			}
@@ -167,9 +192,9 @@ class Tasks
 		$res = $task->save();
 
 		self::closeDB();
-		unset($db);
+		unset($db, $task, $res);
 
-		return $res;
+		return true;
 	}
 
 	/**

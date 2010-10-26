@@ -88,14 +88,11 @@ class Daemon
 			// Loop until we are told to die.
 			while (!$this->_sigterm)
 			{
-				// Dispatch any signals, used instead of ticks=1.
-				pcntl_signal_dispatch();
-
 				// See if we are within our defined child limits.
 				if(count($this->_pids) >= $this->_config['max'])
 				{
-					// Let's sleep on it.
-					usleep($this->_config['sleep']);
+					// Now lets pause.
+					$this->iterate();
 					continue; // Restart.
 				}
 
@@ -111,6 +108,7 @@ class Daemon
 					if ($pid == -1) // We failed, hard
 					{
 						Kohana::$log->add(Kohana::ERROR, 'TaskDaemon: Could not spawn child task process.');
+						Kohana::$log->write();
 						exit(1);
 					}
 					elseif ($pid) // Parent so add the pid to the list
@@ -118,7 +116,8 @@ class Daemon
 						// Parent - add the child's PID to the running list
 						$this->_pids[$pid] = time();
 
-						usleep($this->_config['sleep']);
+						// Now lets pause.
+						$this->iterate(2000000);
 					}
 					else // We are child so lets do it!
 					{
@@ -126,12 +125,13 @@ class Daemon
 						if (posix_setsid() == -1)
 						{
 						    Kohana::$log->add(Kohana::ERROR, 'TaskDaemon: Could not detach from terminal.');
+						    Kohana::$log->write();
 							exit(1);
 						}
 
-						// Do some setup first
+						/*// Do some setup first
 						set_time_limit(1800); // We set to run for a long time.  The tasks should have timelimits set.
-						ob_implicit_flush();
+						/*ob_implicit_flush();
 						ignore_user_abort(true);
 
 						ini_set("max_execution_time", "0");
@@ -140,25 +140,21 @@ class Daemon
 						// Disable any errors from coming into the echo.
 						ini_set('display_errors', 'off');
 						ini_set('log_errors', 'on');
-						error_reporting(E_ALL);
+						error_reporting(E_ALL);*/
 
 						try {
-							// Get db connection.
-							Tasks::openDB();
-
-							/*Kohana::$log->add(Kohana::DEBUG, strtr('TaskDaemon; Child Execute task - route: :route, uri: :uri', array(
+							/*//Kohana::$log->add(Kohana::DEBUG, strtr('TaskDaemon; Child Execute task - route: :route, uri: :uri', array(
 								':route' => $task->route,
 								':uri'   => http_build_query($task->uri)
 							)));*/
 
 							// Child - Execute task
-							Request::factory( Route::get( $task->route )->uri( $task->uri ) )->execute();
+							$req = Request::factory( Route::get( $task->route )->uri( $task->uri ) )->execute();
+
+							unset($req); // Clear memory?
 
 							// Flag the task as ran.
 							Tasks::ranTask($task->task_id);
-
-							// Write log to prevent memory issues
-							Kohana::$log->write();
 						}
 						catch (Database_Exception $e)
 						{
@@ -191,28 +187,22 @@ class Daemon
 						unset($task);
 						exit(0);
 					}
-
-					// Sleep for a short bit to keep from doing things too fast.
-					usleep($this->_config['sleep']);
-
-					// Dispatch any signals, used instead of ticks=1.
-					pcntl_signal_dispatch();
 				}
 				else
 				{
 					// Lets not run the clean up all the time as it is not that important.
-					if(mt_rand(1, 50) == 25)
+					if(date("i") % 10 == 0)
 					{
 						// Lets clean up any old tasks.
 						Tasks::clearCompleted();
 					}
-
-					// Let's sleep on it.
-					usleep($this->_config['sleep']);
 				}
 
-				// Lets do some stuff.
-				clearstatcache();
+				// Dispatch any signals, used instead of ticks=1.
+				pcntl_signal_dispatch();
+
+				// Now lets pause.
+				$this->iterate();
 			}
 
 			// Loop has died so lets do some cleaning up.
@@ -271,7 +261,7 @@ class Daemon
 			break;
 
 			default:
-				Kohana::$log->add(KOHANA::DEBUG, 'TaskDaemon: Sighandler '.$signo);
+				//Kohana::$log->add(KOHANA::DEBUG, 'TaskDaemon: Sighandler '.$signo);
 				break;
 		}
 	}
@@ -292,7 +282,7 @@ class Daemon
 
 		if (count($this->_pids))
 		{
-			Kohana::$log(Kohana::ERROR,'TaskDaemon: Could not kill all children');
+			//Kohana::$log(Kohana::ERROR,'TaskDaemon: Could not kill all children');
 		}
 
 		// Now lets set all the tasks to not running since they are all dead now.
@@ -320,5 +310,20 @@ class Daemon
 		}
 
 		return count($this->_pids) === 0;
+	}
+
+	/**
+	 * Tell the loop to "sleep" for the specified time.  If not passed will use
+	 * the defined sleep value from the config.
+	 *
+	 * @param int $ms
+	 */
+	protected function iterate($ms=null)
+	{
+		// Let's sleep on it.
+		usleep(((!is_null($ms))?$ms:$this->_config['sleep']));
+
+		clearstatcache();
+		return true;
 	}
 }

@@ -30,13 +30,6 @@ class Model_Tasks extends ORM
 
 	protected $_serialize_column = array('uri', 'args');
 
-	/**
-	 * Time to keep finished tasks in the table before deleting them.
-	 *
-	 * @var int
-	 */
-	protected $time_delete_finished = 604800; // 7 days
-
 	public function __get($column)
 	{
 		if(in_array($column, $this->_serialize_column))
