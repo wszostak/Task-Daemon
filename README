@@ -1,0 +1,7 @@
+
+# Simple example
+To run TaskDaemon run the following command:
+	/path/to/php /path/to/kohana/index.php --uri=daemon/launch >> /dev/null &
+
+To shut down TaskDaemon you can use KILL or:
+	/path/to/php /path/to/kohana/index.php --uri=daemon/exit
