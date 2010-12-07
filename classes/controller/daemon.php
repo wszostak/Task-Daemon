@@ -91,10 +91,12 @@ class Controller_Daemon extends Controller
 	/*
 	 * Launch daemon
 	 *
-	 * php index.php --uri=daemon/launch
+	 * php index.php --uri=daemon/launch --daemonize=yes|no (default: yes)
 	 */
 	public function action_launch()
 	{
+		$settings = CLI::options('daemonize');
+
 		// Lets make sure the system is only running one master file.
 		if(file_exists($this->_config['pid_path']))
 		{
@@ -106,36 +108,14 @@ class Controller_Daemon extends Controller
 			}
 		}
 
-		// fork into background
-		$pid = pcntl_fork();
-
-		if ($pid == -1)
-		{
-			// Error - fork failed
-			Kohana::$log->add(Kohana::ERROR, 'TaskDaemon: Initial fork failed');
-			exit;
-		}
-		elseif ($pid)
+		// We do not want to daemonize, useful if you are using some kind of monitoring program
+		if(isset($settings['daemonize']) && $settings['daemonize'] == 'no')
 		{
 			// Fork successful - exit parent (daemon continues in child)
-			Kohana::$log->add(KOHANA::DEBUG, 'TaskDaemon: Daemon created succesfully at: ' . $pid);
+			Kohana::$log->add(KOHANA::DEBUG, 'TaskDaemon: Daemon created succesfully at: ' . posix_getpid());
 
 			// Set the pid file for this daemon so we can see if it is running at any time.
-			file_put_contents( $this->_config['pid_path'], $pid);
-
-			Kohana::$log->write();
-
-			// We are done so we exit out.
-			exit(0);
-		}
-		else
-		{
-			// We need to detach from the master process and become our own master process.
-			if (posix_setsid() == -1)
-			{
-			    Kohana::$log->add(Kohana::ERROR, 'TaskDaemon: Could not detach from terminal in launch.');
-				exit(1);
-			}
+			file_put_contents( $this->_config['pid_path'], posix_getpid());
 
 			// Background process - run daemon
 			Kohana::$log->add(KOHANA::DEBUG,strtr('TaskDaemon: Config :config loaded, max: :max, sleep: :sleep', array(
@@ -151,6 +131,57 @@ class Controller_Daemon extends Controller
 			Daemon::launch($this->_config);
 
 			unset($this);
+		}
+		else // Run as your own standalone daemon.
+		{
+			// fork into background
+			$pid = pcntl_fork();
+
+			if ($pid == -1)
+			{
+				// Error - fork failed
+				Kohana::$log->add(Kohana::ERROR, 'TaskDaemon: Initial fork failed');
+				exit;
+			}
+			elseif ($pid)
+			{
+				// Fork successful - exit parent (daemon continues in child)
+				Kohana::$log->add(KOHANA::DEBUG, 'TaskDaemon: Daemon created succesfully at: ' . $pid);
+
+				// Set the pid file for this daemon so we can see if it is running at any time.
+				file_put_contents( $this->_config['pid_path'], $pid);
+
+				Kohana::$log->write();
+
+				// We are done so we exit out.
+				exit(0);
+			}
+			else
+			{
+				// We need to detach from the master process and become our own master process.
+				if (posix_setsid() == -1)
+				{
+				    Kohana::$log->add(Kohana::ERROR, 'TaskDaemon: Could not detach from terminal in launch.');
+					exit(1);
+				}
+
+				// Background process - run daemon
+				Kohana::$log->add(KOHANA::DEBUG,strtr('TaskDaemon: Config :config loaded, max: :max, sleep: :sleep', array(
+					':config' => $this->_config_name,
+					':max'    => $this->_config['max'],
+					':sleep'  => $this->_config['sleep']
+				)));
+
+				// Write the log to ensure no memory issues
+				Kohana::$log->write();
+
+				// Launch the daemon
+				Daemon::launch($this->_config);
+
+				//exit(0);
+
+				unset($this);
+			}
 		}
 	}
 
