@@ -80,7 +80,7 @@ class Tasks
 
 		DB::delete('tasks')
 			->where('active','=',0)
-			->where('running','=',0)
+			->where('pid','=',0)
 			->where('recurring','=',0)
 			->where('failed','=',0)
 			->where('lastrun','<=', DB::expr("UNIX_TIMESTAMP()-432000"))
@@ -100,7 +100,7 @@ class Tasks
 			->where('active','=',0)
 			->where('recurring','=',0)
 			->where('failed','>',0)
-			->where('lastrun','<=', DB::expr("UNIX_TIMESTAMP()-432000"))
+			->where('lastrun','<=', DB::expr("UNIX_TIMESTAMP()-604800"))
 			->execute();
 
 		self::closeDB();
@@ -114,28 +114,25 @@ class Tasks
 	 */
 	static public function getNextTask()
 	{
+		// Open the DB
 		$db = self::openDB();
 
 		$task = ORM::factory('tasks')
 			->where('active', '=', '1')
-			->where('running', '=', '0')
+			->where('pid', '=', '0')
 			->where('nextrun', '<=', time())
-			->order_by('priority', 'DESC')
+			->order_by('priority', 'ASC')
 			->order_by('nextrun', 'ASC')
 			->limit(1)
 			->find();
 
-		if($task->loaded())
-		{
-			// We are going to run this one so lets flag it as running.
-			$task->running = 1;
-			$task->save();
-		}
-		else
+		// Unable to find task so we set it to false.
+		if(!$task->loaded())
 		{
 			$task = false;
 		}
 
+		// Close the DB
 		self::closeDB();
 		unset($db);
 
@@ -151,12 +148,20 @@ class Tasks
 	 */
 	static public function ranTask($task_id, $error=false, $err_msg=null)
 	{
+		// Open DB
 		$db = self::openDB();
 
+		// Find the task id we are updating.
 		$task = ORM::factory('tasks', $task_id);
 
-		// Error occured.
-		if($error)
+		if(!$task->loaded())
+		{
+			Kohana::$log->add(Kohana::ERROR, 'TaskDaemon: Unable to load task_id="'.$task_id.'" for completion.');
+			Kohana::$log->write();
+		}
+
+		// Error occured with the task.
+		if($error === true)
 		{
 			$task->failed = DB::expr("UNIX_TIMESTAMP()");
 			$task->failed_msg = $err_msg;
@@ -182,10 +187,10 @@ class Tasks
 			}
 		}
 
-		// Task is no longer running.
-		$task->running = 0;
+		// Task is no longer running so empty out the pid.
+		$task->pid = 0;
 
-		// We finished this right now
+		// Set the task as run.
 		$task->lastrun = DB::expr("UNIX_TIMESTAMP()");
 
 		// Save the changes to the task.

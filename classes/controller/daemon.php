@@ -68,9 +68,6 @@ class Controller_Daemon extends Controller
 			exit(1);
 		}
 
-		// Set the pid file
-		$this->_config['pid_path'] = $this->_config['pid_path'] . 'TaskDaemon.' . $this->_config_name . '.pid';
-
 		/*
 		 * Correct the delay time set so that we do not eat up all the processor(s)' time.  Setting usleep to too short of a delay
 		 * will cause the process to eat up all the available CPU time (i.e. process will run at 99-100%).
@@ -98,9 +95,9 @@ class Controller_Daemon extends Controller
 		$settings = CLI::options('daemonize');
 
 		// Lets make sure the system is only running one master file.
-		if(file_exists($this->_config['pid_path']))
+		if(file_exists($this->_config['pid_file']))
 		{
-			$pid = file_get_contents($this->_config['pid_path']);
+			$pid = file_get_contents($this->_config['pid_file']);
 			if (file_exists("/proc/".$pid))
 			{
 				Kohana::$log->add(KOHANA::DEBUG, 'TaskDaemon: Daemon already running at: ' . $pid);
@@ -115,7 +112,7 @@ class Controller_Daemon extends Controller
 			Kohana::$log->add(KOHANA::DEBUG, 'TaskDaemon: Daemon created succesfully at: ' . posix_getpid());
 
 			// Set the pid file for this daemon so we can see if it is running at any time.
-			file_put_contents( $this->_config['pid_path'], posix_getpid());
+			file_put_contents( $this->_config['pid_file'], posix_getpid());
 
 			// Background process - run daemon
 			Kohana::$log->add(KOHANA::DEBUG,strtr('TaskDaemon: Config :config loaded, max: :max, sleep: :sleep', array(
@@ -149,7 +146,7 @@ class Controller_Daemon extends Controller
 				Kohana::$log->add(KOHANA::DEBUG, 'TaskDaemon: Daemon created succesfully at: ' . $pid);
 
 				// Set the pid file for this daemon so we can see if it is running at any time.
-				file_put_contents( $this->_config['pid_path'], $pid);
+				file_put_contents( $this->_config['pid_file'], $pid);
 
 				Kohana::$log->write();
 
@@ -192,9 +189,9 @@ class Controller_Daemon extends Controller
 	 */
 	public function action_exit()
 	{
-		if ( file_exists( $this->_config['pid_path']))
+		if ( file_exists( $this->_config['pid_file']))
 		{
-			$pid = file_get_contents($this->_config['pid_path']);
+			$pid = file_get_contents($this->_config['pid_file']);
 
 			if ( $pid !== 0)
 			{
@@ -209,17 +206,17 @@ class Controller_Daemon extends Controller
 				else
 				{
 					Kohana::$log->add(Kohana::ERROR, "TaskDaemon: An error occured while sending SIGTERM");
-					unlink($this->_config['pid_path']);
+					unlink($this->_config['pid_file']);
 				}
 			}
 			else
 			{
-				Kohana::$log->add(KOHANA::DEBUG, "Could not find TaskDaemon pid in file :".$this->_config['pid_path']);
+				Kohana::$log->add(KOHANA::DEBUG, "Could not find TaskDaemon pid in file :".$this->_config['pid_file']);
 			}
 		}
 		else
 		{
-			Kohana::$log->add(Kohana::ERROR, "TaskDaemon pid file ".$this->_config['pid_path']." does not exist");
+			Kohana::$log->add(Kohana::ERROR, "TaskDaemon pid file ".$this->_config['pid_file']." does not exist");
 		}
 
 		// Write log to prevent memory issues
@@ -233,8 +230,8 @@ class Controller_Daemon extends Controller
 	 */
 	public function action_status()
 	{
-		$pid = file_exists($this->_config['pid_path'])
-			? file_get_contents($this->_config['pid_path'])
+		$pid = file_exists($this->_config['pid_file'])
+			? file_get_contents($this->_config['pid_file'])
 			: FALSE;
 
 		echo $pid

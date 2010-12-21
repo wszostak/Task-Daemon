@@ -1,14 +1,14 @@
 /*
-* SQL for Tasks table.
+* SQL for Tasks table for version 1.1+.
 */
 CREATE TABLE IF NOT EXISTS `tasks` (
   `task_id` int(10) unsigned NOT NULL AUTO_INCREMENT,
   `route` varchar(50) NOT NULL,
   `uri` text NOT NULL,
   `active` tinyint(1) unsigned NOT NULL DEFAULT '1',
-  `running` tinyint(1) unsigned NOT NULL DEFAULT '0',
   `priority` tinyint(2) unsigned NOT NULL DEFAULT '5',
   `recurring` int(8) unsigned NOT NULL COMMENT 'Time delay between recurring',
+  `pid` smallint(5) unsigned NOT NULL,
   `created` int(10) unsigned NOT NULL,
   `nextrun` int(10) unsigned NOT NULL,
   `lastrun` int(10) unsigned NOT NULL,
@@ -16,7 +16,16 @@ CREATE TABLE IF NOT EXISTS `tasks` (
   `failed` int(10) unsigned NOT NULL,
   `failed_msg` text NOT NULL,
   PRIMARY KEY (`task_id`),
-  KEY `running` (`running`),
   KEY `nextrun` (`nextrun`),
-  KEY `active` (`active`)
+  KEY `active` (`active`),
+  KEY `pid` (`pid`)
 ) ENGINE=InnoDB  DEFAULT CHARSET=utf8 AUTO_INCREMENT=1;
+
+
+/*
+* Upgrades if running 1.0
+*/
+ALTER TABLE `tasks` DROP `running`;
+
+ALTER TABLE `tasks` ADD `pid` SMALLINT( 5 ) UNSIGNED NOT NULL AFTER `recurring` ,
+ADD INDEX ( `pid` );
