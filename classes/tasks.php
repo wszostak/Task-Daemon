@@ -148,6 +148,8 @@ class Tasks
 	 */
 	static public function ranTask($task_id, $error=false, $err_msg=null)
 	{
+		self::closeDB();
+		
 		// Open DB
 		$db = self::openDB();
 

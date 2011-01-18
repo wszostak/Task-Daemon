@@ -235,10 +235,13 @@ class Daemon
 		{
 			Kohana::$log->add(Kohana::ERROR, 'TaskDaemon Task: Database error code: '.$e->getCode().' msg: '. $e->getMessage());
 
-			Kohana::$log->add(KOHANA::DEBUG, "Taskdaemon died!");
+			//Kohana::$log->add(KOHANA::DEBUG, "Taskdaemon died!");
 
 			// Write log to prevent memory issues
 			Kohana::$log->write();
+			
+			// Flag the task as ran, but with error.
+			Tasks::ranTask($task->task_id, true, $e->getMessage());
 
 			exit(1);
 		}
@@ -246,10 +249,13 @@ class Daemon
 		{
 			Kohana::$log->add(Kohana::ERROR, 'TaskDaemon: '.$e->getCode().' msg: '. $e->getMessage());
 
-			Kohana::$log->add(KOHANA::DEBUG, "Taskdaemon died!");
+			//Kohana::$log->add(KOHANA::DEBUG, "Taskdaemon died!");
 
 			// Write log to prevent memory issues
 			Kohana::$log->write();
+			
+			// Flag the task as ran, but with error.
+			Tasks::ranTask($task->task_id, true, $e->getMessage());
 
 			exit(1);
 		}
