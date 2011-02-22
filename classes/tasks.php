@@ -149,7 +149,7 @@ class Tasks
 	static public function ranTask($task_id, $error=false, $err_msg=null)
 	{
 		self::closeDB();
-		
+
 		// Open DB
 		$db = self::openDB();
 
@@ -158,7 +158,7 @@ class Tasks
 
 		if(!$task->loaded())
 		{
-			Kohana::$log->add(Kohana::ERROR, 'TaskDaemon: Unable to load task_id="'.$task_id.'" for completion.');
+			Kohana::$log->add(Log::ERROR, 'TaskDaemon: Unable to load task_id="'.$task_id.'" for completion.');
 			Kohana::$log->write();
 		}
 

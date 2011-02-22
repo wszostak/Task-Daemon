@@ -61,7 +61,7 @@ class Controller_Daemon extends Controller
 
 		if (empty($this->_config))
 		{
-			Kohana::$log->add(Kohana::ERROR, 'TaskDaemon: Config not found ("daemon.' . $this->_config_name . '"). Exiting.');
+			Kohana::$log->add(Log::ERROR, 'TaskDaemon: Config not found ("daemon.' . $this->_config_name . '"). Exiting.');
 
 			Kohana::$log->write();
 
@@ -82,7 +82,7 @@ class Controller_Daemon extends Controller
 	 */
 	public function action_index()
 	{
-		$this->request->response = 'TaskDaemon: Route is successful'.PHP_EOL;
+		$this->request->body('TaskDaemon: Route is successful'.PHP_EOL);
 	}
 
 	/*
@@ -100,7 +100,7 @@ class Controller_Daemon extends Controller
 			$pid = file_get_contents($this->_config['pid_file']);
 			if (file_exists("/proc/".$pid))
 			{
-				Kohana::$log->add(KOHANA::DEBUG, 'TaskDaemon: Daemon already running at: ' . $pid);
+				Kohana::$log->add(Log::DEBUG, 'TaskDaemon: Daemon already running at: ' . $pid);
 				exit;
 			}
 		}
@@ -109,13 +109,13 @@ class Controller_Daemon extends Controller
 		if(isset($settings['daemonize']) && $settings['daemonize'] == 'no')
 		{
 			// Fork successful - exit parent (daemon continues in child)
-			Kohana::$log->add(KOHANA::DEBUG, 'TaskDaemon: Daemon created succesfully at: ' . posix_getpid());
+			Kohana::$log->add(Log::DEBUG, 'TaskDaemon: Daemon created succesfully at: ' . posix_getpid());
 
 			// Set the pid file for this daemon so we can see if it is running at any time.
 			file_put_contents( $this->_config['pid_file'], posix_getpid());
 
 			// Background process - run daemon
-			Kohana::$log->add(KOHANA::DEBUG,strtr('TaskDaemon: Config :config loaded, max: :max, sleep: :sleep', array(
+			Kohana::$log->add(Log::DEBUG,strtr('TaskDaemon: Config :config loaded, max: :max, sleep: :sleep', array(
 				':config' => $this->_config_name,
 				':max'    => $this->_config['max'],
 				':sleep'  => $this->_config['sleep']
@@ -137,13 +137,13 @@ class Controller_Daemon extends Controller
 			if ($pid == -1)
 			{
 				// Error - fork failed
-				Kohana::$log->add(Kohana::ERROR, 'TaskDaemon: Initial fork failed');
+				Kohana::$log->add(Log::ERROR, 'TaskDaemon: Initial fork failed');
 				exit;
 			}
 			elseif ($pid)
 			{
 				// Fork successful - exit parent (daemon continues in child)
-				Kohana::$log->add(KOHANA::DEBUG, 'TaskDaemon: Daemon created succesfully at: ' . $pid);
+				Kohana::$log->add(Log::DEBUG, 'TaskDaemon: Daemon created succesfully at: ' . $pid);
 
 				// Set the pid file for this daemon so we can see if it is running at any time.
 				file_put_contents( $this->_config['pid_file'], $pid);
@@ -158,12 +158,12 @@ class Controller_Daemon extends Controller
 				// We need to detach from the master process and become our own master process.
 				if (posix_setsid() == -1)
 				{
-				    Kohana::$log->add(Kohana::ERROR, 'TaskDaemon: Could not detach from terminal in launch.');
+				    Kohana::$log->add(Log::ERROR, 'TaskDaemon: Could not detach from terminal in launch.');
 					exit(1);
 				}
 
 				// Background process - run daemon
-				Kohana::$log->add(KOHANA::DEBUG,strtr('TaskDaemon: Config :config loaded, max: :max, sleep: :sleep', array(
+				Kohana::$log->add(Log::DEBUG,strtr('TaskDaemon: Config :config loaded, max: :max, sleep: :sleep', array(
 					':config' => $this->_config_name,
 					':max'    => $this->_config['max'],
 					':sleep'  => $this->_config['sleep']
@@ -195,28 +195,28 @@ class Controller_Daemon extends Controller
 
 			if ( $pid !== 0)
 			{
-				Kohana::$log->add(KOHANA::DEBUG, 'Sending SIGTERM to pid ' . $pid);
+				Kohana::$log->add(Log::DEBUG, 'Sending SIGTERM to pid ' . $pid);
 
 				posix_kill($pid, SIGTERM);
 
 				if (posix_get_last_error() === 0)
 				{
-					Kohana::$log->add(KOHANA::DEBUG, 'Signal sent SIGTERM to pid ' . $pid);
+					Kohana::$log->add(Log::DEBUG, 'Signal sent SIGTERM to pid ' . $pid);
 				}
 				else
 				{
-					Kohana::$log->add(Kohana::ERROR, "TaskDaemon: An error occured while sending SIGTERM");
+					Kohana::$log->add(Log::ERROR, "TaskDaemon: An error occured while sending SIGTERM");
 					unlink($this->_config['pid_file']);
 				}
 			}
 			else
 			{
-				Kohana::$log->add(KOHANA::DEBUG, "Could not find TaskDaemon pid in file :".$this->_config['pid_file']);
+				Kohana::$log->add(Log::DEBUG, "Could not find TaskDaemon pid in file :".$this->_config['pid_file']);
 			}
 		}
 		else
 		{
-			Kohana::$log->add(Kohana::ERROR, "TaskDaemon pid file ".$this->_config['pid_file']." does not exist");
+			Kohana::$log->add(Log::ERROR, "TaskDaemon pid file ".$this->_config['pid_file']." does not exist");
 		}
 
 		// Write log to prevent memory issues

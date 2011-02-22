@@ -114,7 +114,7 @@ class Daemon
 
 					if ($pid == -1) // We failed, hard
 					{
-						Kohana::$log->add(Kohana::ERROR, 'TaskDaemon: Could not spawn child task process.');
+						Kohana::$log->add(Log::ERROR, 'TaskDaemon: Could not spawn child task process.');
 						Kohana::$log->write();
 						exit(1);
 					}
@@ -152,13 +152,13 @@ class Daemon
 						// We need to detach from the master process and become our own master process.
 						if (posix_setsid() == -1)
 						{
-						    Kohana::$log->add(Kohana::ERROR, 'TaskDaemon: Could not detach from terminal.');
+						    Kohana::$log->add(Log::ERROR, 'TaskDaemon: Could not detach from terminal.');
 						    Kohana::$log->write();
 							exit(1);
 						}
 
 						try {
-							/*//Kohana::$log->add(Kohana::DEBUG, strtr('TaskDaemon; Child Execute task - route: :route, uri: :uri', array(
+							/*//Kohana::$log->add(Log::DEBUG, strtr('TaskDaemon; Child Execute task - route: :route, uri: :uri', array(
 								':route' => $task->route,
 								':uri'   => http_build_query($task->uri)
 							)));
@@ -174,7 +174,7 @@ class Daemon
 						}
 						catch (Database_Exception $e)
 						{
-							Kohana::$log->add(Kohana::ERROR, 'TaskDaemon Task: Database error code: '.$e->getCode().' msg: '. $e->getMessage());
+							Kohana::$log->add(Log::ERROR, 'TaskDaemon Task: Database error code: '.$e->getCode().' msg: '. $e->getMessage());
 
 							// Write log to prevent memory issues
 							Kohana::$log->write();
@@ -186,7 +186,7 @@ class Daemon
 						catch (Exception $e)
 						{
 							// Task failed - log message
-							Kohana::$log->add(Kohana::ERROR, strtr('TaskDaemon: Task failed - route: :route, uri: :uri, msg: :msg', array(
+							Kohana::$log->add(Log::ERROR, strtr('TaskDaemon: Task failed - route: :route, uri: :uri, msg: :msg', array(
 								':route' => $task->route,
 								':uri'   => http_build_query((array)$task->uri),
 								':msg'   => $e->getMessage()
@@ -224,7 +224,7 @@ class Daemon
 			// Loop has died so lets do some cleaning up.
 			$this->clean();
 
-			Kohana::$log->add(KOHANA::DEBUG, "Taskdaemon exited!");
+			Kohana::$log->add(Log::DEBUG, "Taskdaemon exited!");
 
 			// Write log to prevent memory issues
 			Kohana::$log->write();
@@ -233,13 +233,13 @@ class Daemon
 		}
 		catch (Database_Exception $e)
 		{
-			Kohana::$log->add(Kohana::ERROR, 'TaskDaemon Task: Database error code: '.$e->getCode().' msg: '. $e->getMessage());
+			Kohana::$log->add(Log::ERROR, 'TaskDaemon Task: Database error code: '.$e->getCode().' msg: '. $e->getMessage());
 
-			//Kohana::$log->add(KOHANA::DEBUG, "Taskdaemon died!");
+			//Kohana::$log->add(Log::DEBUG, "Taskdaemon died!");
 
 			// Write log to prevent memory issues
 			Kohana::$log->write();
-			
+
 			// Flag the task as ran, but with error.
 			Tasks::ranTask($task->task_id, true, $e->getMessage());
 
@@ -247,13 +247,13 @@ class Daemon
 		}
 		catch (Exception $e)
 		{
-			Kohana::$log->add(Kohana::ERROR, 'TaskDaemon: '.$e->getCode().' msg: '. $e->getMessage());
+			Kohana::$log->add(Log::ERROR, 'TaskDaemon: '.$e->getCode().' msg: '. $e->getMessage());
 
-			//Kohana::$log->add(KOHANA::DEBUG, "Taskdaemon died!");
+			//Kohana::$log->add(Log::DEBUG, "Taskdaemon died!");
 
 			// Write log to prevent memory issues
 			Kohana::$log->write();
-			
+
 			// Flag the task as ran, but with error.
 			Tasks::ranTask($task->task_id, true, $e->getMessage());
 
@@ -316,7 +316,7 @@ class Daemon
 			break;
 
 			default:
-				Kohana::$log->add(KOHANA::DEBUG, 'TaskDaemon: Sighandler '.$signo);
+				Kohana::$log->add(Log::DEBUG, 'TaskDaemon: Sighandler '.$signo);
 				break;
 		}
 	}
@@ -337,7 +337,7 @@ class Daemon
 
 		/*if (count($this->_pids))
 		{
-			Kohana::$log->add(Kohana::ERROR,'TaskDaemon: Could not kill all children');
+			Kohana::$log->add(Log::ERROR,'TaskDaemon: Could not kill all children');
 			Kohana::$log->write();
 		}*/
 
