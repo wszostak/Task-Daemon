@@ -134,18 +134,6 @@ class Daemon
 						// Close the db connection
 						Tasks::closeDB();
 						unset($db);
-
-						/*// In the event that a signal for this pid was caught before we get here, it will be in our signalQueue array
-			            // So let's go ahead and process it now as if we'd just received the signal
-			            if(isset($this->signalQueue[$pid])){
-							echo "found $pid in the signal queue, processing it now \n";
-			                $this->sig_handler(SIGCHLD, $pid, $this->_signalQueue[$pid]);
-			                unset($this->_signalQueue[$pid]);
-			            }*/
-
-
-						// Now lets pause.
-						//$this->iterate(2000000);
 					}
 					else // We are child so lets do it!
 					{
@@ -158,12 +146,6 @@ class Daemon
 						}
 
 						try {
-							/*//Kohana::$log->add(Log::DEBUG, strtr('TaskDaemon; Child Execute task - route: :route, uri: :uri', array(
-								':route' => $task->route,
-								':uri'   => http_build_query($task->uri)
-							)));
-							Kohana::$log->write();*/
-
 							// Child - Execute task
 							$req = Request::factory( Route::get( $task->route )->uri( $task->uri ) )->execute();
 
@@ -249,8 +231,6 @@ class Daemon
 		{
 			Kohana::$log->add(Log::ERROR, 'TaskDaemon: '.$e->getCode().' msg: '. $e->getMessage());
 
-			//Kohana::$log->add(Log::DEBUG, "Taskdaemon died!");
-
 			// Write log to prevent memory issues
 			Kohana::$log->write();
 
@@ -266,38 +246,6 @@ class Daemon
 	 */
 	public function sig_handler($signo, $pid=null, $status=null)
 	{
-		/*//If no pid is provided, that means we're getting the signal from the system.  Let's figure out
-        //which child process ended
-        if(!$pid)
-        {
-            $pid = pcntl_waitpid(-1, $status, WNOHANG);
-        }
-
-        // Make sure we get all of the exited children
-        while($pid > 0)
-        {
-            if($pid && isset($this->_pids[$pid]))
-            {
-                $exitCode = pcntl_wexitstatus($status);
-
-                if($exitCode != 0)
-                {
-                    echo "$pid exited with status ".$exitCode."\n";
-                }
-                unset($this->_pids[$pid]);
-            }
-            elseif($pid)
-            {
-                //Oh no, our job has finished before this parent process could even note that it had been launched!
-                //Let's make note of it and handle it when the parent process is ready for it
-                echo "..... Adding $pid to the signal queue ..... \n";
-                $this->_signalQueue[$pid] = $status;
-            }
-
-            $pid = pcntl_waitpid(-1, $status, WNOHANG);
-        }*/
-
-
 		switch ($signo)
 		{
 			case SIGCHLD:
@@ -334,12 +282,6 @@ class Daemon
 			$this->kill_all();
 			sleep(1);
 		}
-
-		/*if (count($this->_pids))
-		{
-			Kohana::$log->add(Log::ERROR,'TaskDaemon: Could not kill all children');
-			Kohana::$log->write();
-		}*/
 
 		// Now lets set all the tasks to not running since they are all dead now.
 		DB::update(ORM::factory('tasks')->table_name())

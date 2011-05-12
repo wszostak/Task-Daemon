@@ -1,6 +1,3 @@
-/*
-* SQL for Tasks table for version 1.1+.
-*/
 CREATE TABLE IF NOT EXISTS `tasks` (
   `task_id` int(10) unsigned NOT NULL AUTO_INCREMENT,
   `route` varchar(50) NOT NULL,
@@ -20,12 +17,3 @@ CREATE TABLE IF NOT EXISTS `tasks` (
   KEY `active` (`active`),
   KEY `pid` (`pid`)
 ) ENGINE=InnoDB  DEFAULT CHARSET=utf8 AUTO_INCREMENT=1;
-
-
-/*
-* Upgrades if running 1.0
-*/
-ALTER TABLE `tasks` DROP `running`;
-
-ALTER TABLE `tasks` ADD `pid` SMALLINT( 5 ) UNSIGNED NOT NULL AFTER `recurring` ,
-ADD INDEX ( `pid` );
