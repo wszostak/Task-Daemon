@@ -284,7 +284,7 @@ class Daemon
 		}
 
 		// Now lets set all the tasks to not running since they are all dead now.
-		DB::update(ORM::factory('tasks')->table_name())
+		DB::update(Sprig::factory('task')->table())
 			->set(array('pid' => 0))
 			->where('pid', '>', 0)
 			->execute();

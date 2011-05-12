@@ -43,7 +43,7 @@ class Tasks
 	{
 		try {
 			// Lets add the task
-			$task = ORM::factory('tasks');
+			$task = Sprig::factory('task');
 
 			$task->route = $route;
 			$task->uri = $uri;
@@ -51,13 +51,12 @@ class Tasks
 			$task->priority = $priority;
 			$task->fail_on_error = (bool)(int)$fail_on_error;
 
-			$task->nextrun = DB::expr("UNIX_TIMESTAMP()");
+			$task->nextrun = time();
 
 			// Save the task
-			$task->save();
+			$task->create();
 
 			return true;
-
 		}
 		catch (Database_Exception $e)
 		{
@@ -83,8 +82,8 @@ class Tasks
 			->where('pid','=',0)
 			->where('recurring','=',0)
 			->where('failed','=',0)
-			->where('lastrun','<=', DB::expr("UNIX_TIMESTAMP()-432000"))
-			->execute();
+			->where('lastrun','<=', time()-432000) // keep 5 days
+			->execute($db);
 
 		self::closeDB();
 		unset($db);
@@ -100,7 +99,7 @@ class Tasks
 			->where('active','=',0)
 			->where('recurring','=',0)
 			->where('failed','>',0)
-			->where('lastrun','<=', DB::expr("UNIX_TIMESTAMP()-604800"))
+			->where('lastrun','<=', time()-604800) // keep 7 days
 			->execute();
 
 		self::closeDB();
@@ -117,17 +116,17 @@ class Tasks
 		// Open the DB
 		$db = self::openDB();
 
-		$task = ORM::factory('tasks')
+		$query = DB::select()
 			->where('active', '=', '1')
 			->where('pid', '=', '0')
 			->where('nextrun', '<=', time())
 			->order_by('priority', 'ASC')
-			->order_by('nextrun', 'ASC')
-			->limit(1)
-			->find();
+			->order_by('nextrun', 'ASC');
+
+		$task = Sprig::factory('task')->load($query);
 
 		// Unable to find task so we set it to false.
-		if(!$task->loaded())
+		if( ! $task->loaded())
 		{
 			$task = false;
 		}
@@ -154,18 +153,20 @@ class Tasks
 		$db = self::openDB();
 
 		// Find the task id we are updating.
-		$task = ORM::factory('tasks', $task_id);
+		$task = Sprig::factory('task', array('task_id' => $task_id))->load();
 
-		if(!$task->loaded())
+		if( ! $task->loaded())
 		{
 			Kohana::$log->add(Log::ERROR, 'TaskDaemon: Unable to load task_id="'.$task_id.'" for completion.');
 			Kohana::$log->write();
 		}
 
+		$now = time();
+
 		// Error occured with the task.
 		if($error === true)
 		{
-			$task->failed = DB::expr("UNIX_TIMESTAMP()");
+			$task->failed = $now;
 			$task->failed_msg = $err_msg;
 
 			// Check to see if we need to kill this task on error, otherwise it will continue to try to run.
@@ -181,7 +182,7 @@ class Tasks
 			// We have a recurring task so we need to reset it.
 			if($task->recurring > 0)
 			{
-				$task->nextrun = DB::expr("UNIX_TIMESTAMP() + {$task->recurring}");
+				$task->nextrun = $now + $task->recurring;
 			}
 			else // Single (non-recurring) task so mark as completed.
 			{
@@ -193,10 +194,10 @@ class Tasks
 		$task->pid = 0;
 
 		// Set the task as run.
-		$task->lastrun = DB::expr("UNIX_TIMESTAMP()");
+		$task->lastrun = $now;
 
 		// Save the changes to the task.
-		$res = $task->save();
+		$res = $task->update();
 
 		self::closeDB();
 		unset($db, $task, $res);

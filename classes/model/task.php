@@ -20,15 +20,45 @@
  * You should have received a copy of the GNU General Public License
  * along with TaskDaemon.  If not, see <http://www.gnu.org/licenses/>.
  */
-class Model_Tasks extends ORM
+class Model_Task extends Sprig
 {
-	protected $_db = 'default';
-	protected $_table_name  = 'tasks';
-	protected $_primary_key = 'task_id';
-
-	protected $_created_column = array('column' => 'created', 'format' => TRUE);
-
 	protected $_serialize_column = array('uri', 'args');
+
+	public function _init()
+	{
+		$this->_fields = array(
+			'task_id'       => new Sprig_Field_Auto,
+                        'route'         => new Sprig_Field_Char(array(
+				'max_width' => 50,
+			)),
+                        'uri'           => new Sprig_Field_Text,
+                        'active'        => new Sprig_Field_Boolean(array(
+				'default' => TRUE,
+			)),
+                        'priority'      => new Sprig_Field_Integer(array(
+				'max_width' => 2,
+				'default'   => 5,
+			)),
+                        'recurring'     => new Sprig_Field_Integer(array(
+				'max_width' => 8,
+			)),
+                        'pid'           => new Sprig_Field_Integer(array(
+				'max_width' => 5,
+			)),
+			'created'       => new Sprig_Field_Timestamp(array(
+				// 'on_create'
+			)),
+			'nextrun'       => new Sprig_Field_Timestamp,
+			'lastrun'       => new Sprig_Field_Timestamp,
+			'fail_on_error' => new Sprig_Field_Boolean(array(
+				'default' => FALSE,
+			)),
+                        'failed'        => new Sprig_Field_Integer(array(
+				'max_width' => 10,
+			)),
+			'failed_msg'    => new Sprig_Field_Text,
+		);
+	}
 
 	public function __get($column)
 	{
